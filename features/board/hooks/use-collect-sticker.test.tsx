@@ -31,6 +31,7 @@ jest.mock("@/services/analytics", () => ({
     },
     board: {
       stickerCollected: jest.fn().mockResolvedValue(undefined),
+      completed: jest.fn().mockResolvedValue(undefined),
     },
   },
 }));
@@ -54,6 +55,7 @@ jest.mock("@/services/whale-message", () => ({
 const collectStickerActionMock = jest.mocked(collectStickerAction);
 const errorMock = jest.mocked(toast.error);
 const stickerCollectedMock = jest.mocked(analytics.board.stickerCollected);
+const boardCompletedMock = jest.mocked(analytics.board.completed);
 const actionFailedMock = jest.mocked(analytics.action.failed);
 
 const updatedBoard: BoardRecord = {
@@ -136,7 +138,42 @@ test("스티커 저장 성공 후 관련 조회를 갱신한다", async () => {
       queryKey: archiveKeys.detail("board-1"),
     }),
   );
-  expect(stickerCollectedMock).toHaveBeenCalledWith("app");
+  expect(stickerCollectedMock).toHaveBeenCalledWith("app", "board-1");
+});
+
+test("마지막 sticker로 완료된 보드의 완료 이벤트를 기록한다", async () => {
+  collectStickerActionMock.mockResolvedValueOnce({
+    ...updatedBoard,
+    currentCount: 30,
+    status: "completed",
+    createdAt: "2026-09-01T15:00:00.000Z",
+    completedAt: "2026-09-29T14:59:59.000Z",
+  });
+  const { wrapper } = createHarness();
+  const { result } = await renderHook(() => useCollectSticker(), { wrapper });
+
+  await act(async () => {
+    await result.current.mutateAsync({
+      boardId: "board-1",
+      source: "app",
+    });
+  });
+
+  expect(boardCompletedMock).toHaveBeenCalledWith("board-1", 28);
+});
+
+test("완료되지 않은 보드에는 완료 이벤트를 기록하지 않는다", async () => {
+  const { wrapper } = createHarness();
+  const { result } = await renderHook(() => useCollectSticker(), { wrapper });
+
+  await act(async () => {
+    await result.current.mutateAsync({
+      boardId: "board-1",
+      source: "app",
+    });
+  });
+
+  expect(boardCompletedMock).not.toHaveBeenCalled();
 });
 
 test("스티커 action에 현재 사용자 정보를 전달한다", async () => {

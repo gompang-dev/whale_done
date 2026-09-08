@@ -3,7 +3,7 @@ import {
   useIsFnbVisible,
   useRootBackExit,
 } from "@/features/navigation";
-import { postHogClient } from "@/services/analytics";
+import { postHogClient, useIdentifyUser } from "@/services/analytics";
 import { AppLifecycleEffects } from "@/services/app-lifecycle";
 import { UserProvider, useUser } from "@/services/user";
 import { TopLevelSheetProvider } from "@/shared/components/bottom-sheet/top-level-sheet-provider";
@@ -43,10 +43,11 @@ const queryClient = new QueryClient({
 });
 
 const RootLayoutNav = () => {
-  const { isInitialized } = useUser();
+  const { isInitialized, profileId } = useUser();
   const pathname = usePathname();
   const shouldShowFnb = useIsFnbVisible();
   useRootBackExit(pathname);
+  useIdentifyUser(profileId);
 
   if (!isInitialized) return null;
 

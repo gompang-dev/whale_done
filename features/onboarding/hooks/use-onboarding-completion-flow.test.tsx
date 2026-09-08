@@ -167,7 +167,7 @@ test("onboarding 저장 성공 이후 board와 마지막 step을 기록한다", 
     await result.current.completeWithHomePreview();
   });
 
-  expect(boardCreatedMock).toHaveBeenCalledWith("onboarding");
+  expect(boardCreatedMock).toHaveBeenCalledWith("onboarding", 30);
   expect(stepCompletedMock).toHaveBeenCalledWith("notification");
   expect(refreshAfterBoardChangedMock).toHaveBeenCalled();
   expect(replaceMock).toHaveBeenCalled();

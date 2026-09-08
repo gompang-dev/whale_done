@@ -21,10 +21,20 @@ export type AnalyticsAction =
   | "notification_toggle";
 
 export type AnalyticsEventMap = {
-  board_created: { source: "board_create" | "onboarding" };
+  board_created: {
+    source: "board_create" | "onboarding";
+    target_count: number;
+  };
   board_updated: undefined;
   board_deleted: undefined;
-  sticker_collected: { source: "app" | "widget" };
+  sticker_collected: {
+    source: "app" | "widget";
+    board_id: string;
+  };
+  board_completed: {
+    board_id: string;
+    total_days_taken: number;
+  };
   active_limit_reached: { source: "client" | "server" };
   board_edit_started: undefined;
   stats_viewed: undefined;

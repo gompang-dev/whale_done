@@ -73,7 +73,7 @@ const useOnboardingCompletionFlow = ({ form }: Props) => {
       return;
     }
 
-    void analytics.board.created("onboarding");
+    void analytics.board.created("onboarding", createdBoard.targetCount);
     await requestNotificationPermission();
     await completeOnboarding();
 

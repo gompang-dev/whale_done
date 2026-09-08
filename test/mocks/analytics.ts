@@ -14,6 +14,7 @@ export const analytics = {
     updated: noop,
     deleted: noop,
     stickerCollected: noop,
+    completed: noop,
     activeLimitReached: noop,
     editStarted: noop,
   },
@@ -32,3 +33,4 @@ export const analytics = {
 
 export const useTrackOnboardingStart = () => {};
 export const useTrackView = () => {};
+export const useIdentifyUser = () => {};

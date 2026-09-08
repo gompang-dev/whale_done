@@ -4,6 +4,7 @@ import {
   CollectStickerError,
 } from "@/features/board/types";
 import { analytics } from "@/services/analytics";
+import { getBoardTotalDaysTaken } from "@/services/analytics/events/board-completion";
 import { useUser } from "@/services/user";
 import { toast } from "@/shared/toasts/toast";
 import { reportError } from "@/shared/lib/report-error";
@@ -32,7 +33,24 @@ export const useCollectSticker = () => {
       });
     },
     onSuccess: async (updatedBoard, variables) => {
-      void analytics.board.stickerCollected(variables.source);
+      void analytics.board.stickerCollected(variables.source, updatedBoard.id);
+
+      if (
+        updatedBoard.status === "completed" &&
+        updatedBoard.currentCount >= updatedBoard.targetCount &&
+        updatedBoard.createdAt &&
+        updatedBoard.completedAt
+      ) {
+        const totalDaysTaken = getBoardTotalDaysTaken(
+          updatedBoard.createdAt,
+          updatedBoard.completedAt,
+        );
+
+        if (totalDaysTaken !== null) {
+          void analytics.board.completed(updatedBoard.id, totalDaysTaken);
+        }
+      }
+
       await refreshAfterStickerCollected(queryClient, updatedBoard.id);
     },
     onError: async (

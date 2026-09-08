@@ -10,13 +10,18 @@ test("모든 analytics adapter에 같은 이벤트를 전달한다", async () =>
   ];
   const trackEvent = createTrackEvent(adapters);
 
-  await trackEvent("sticker_collected", { source: "app" });
+  await trackEvent("sticker_collected", {
+    source: "app",
+    board_id: "board-1",
+  });
 
   expect(firstTrack).toHaveBeenCalledWith("sticker_collected", {
     source: "app",
+    board_id: "board-1",
   });
   expect(secondTrack).toHaveBeenCalledWith("sticker_collected", {
     source: "app",
+    board_id: "board-1",
   });
 });
 

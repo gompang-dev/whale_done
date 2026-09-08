@@ -8,18 +8,20 @@ jest.mock("../core/track-event", () => ({
 const trackEventMock = jest.mocked(trackEvent);
 
 test("board facade가 고정된 event contract로 변환한다", () => {
-  void analytics.board.created("board_create");
+  void analytics.board.created("board_create", 30);
   void analytics.board.updated();
   void analytics.board.deleted();
-  void analytics.board.stickerCollected("app");
+  void analytics.board.stickerCollected("app", "board-1");
+  void analytics.board.completed("board-1", 28);
   void analytics.board.activeLimitReached("server");
   void analytics.board.editStarted();
 
   expect(trackEventMock.mock.calls).toEqual([
-    ["board_created", { source: "board_create" }],
+    ["board_created", { source: "board_create", target_count: 30 }],
     ["board_updated"],
     ["board_deleted"],
-    ["sticker_collected", { source: "app" }],
+    ["sticker_collected", { source: "app", board_id: "board-1" }],
+    ["board_completed", { board_id: "board-1", total_days_taken: 28 }],
     ["active_limit_reached", { source: "server" }],
     ["board_edit_started"],
   ]);

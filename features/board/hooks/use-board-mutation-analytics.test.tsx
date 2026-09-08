@@ -97,8 +97,8 @@ afterAll(() => {
   notifyManager.setScheduler(defaultScheduler);
 });
 
-test("board 생성 API 성공 뒤 created를 기록한다", async () => {
-  createBoardMock.mockResolvedValue({} as never);
+test("board 생성 API 성공 뒤 target count와 created를 기록한다", async () => {
+  createBoardMock.mockResolvedValue({ targetCount: 30 } as never);
   const { result } = await renderHook(() => useCreateBoard(), {
     wrapper: createWrapper(),
   });
@@ -114,7 +114,7 @@ test("board 생성 API 성공 뒤 created를 기록한다", async () => {
     await result.current.createBoard();
   });
 
-  expect(boardCreatedMock).toHaveBeenCalledWith("board_create");
+  expect(boardCreatedMock).toHaveBeenCalledWith("board_create", 30);
   expect(refreshAfterBoardChangedMock).toHaveBeenCalled();
 });
 
