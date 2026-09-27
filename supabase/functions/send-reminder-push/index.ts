@@ -1,12 +1,15 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3";
+import {
+  getKstDayWindow,
+  getReminderBody,
+  REMINDER_BODIES,
+} from "./reminder-message.ts";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const MESSAGE_TRIGGER = "evening_reminder";
 const MESSAGE_TYPE = "whale_message";
 const MESSAGE_TITLE = "웨일던";
-const MESSAGE_BODY =
-  "오늘 하루도 얼마 남지 않았어요. 1분만 투자해서 습관을 지켜볼까요?";
 
 type ReminderPolicy = "custom_time" | "fixed_21";
 
@@ -28,7 +31,15 @@ type ClaimedReminder = {
 type PushMessage = {
   logId: string;
   token: string;
+  body: string;
 };
+
+type BoardRow = {
+  id: string;
+  profile_id: string;
+};
+
+type SupabaseClient = ReturnType<typeof createClient>;
 
 const CLAIM_RPC_BY_POLICY = {
   custom_time: "claim_due_push_reminders",
@@ -73,6 +84,132 @@ const chunk = <T>(items: T[], size: number) => {
   return chunks;
 };
 
+const loadBoards = async (
+  supabase: SupabaseClient,
+  profileIds: string[],
+  status: "active" | "completed",
+  dayStart: string,
+  dayEnd: string,
+) => {
+  const boards: BoardRow[] = [];
+
+  for (let offset = 0; ; offset += 1000) {
+    let query = supabase
+      .from("boards")
+      .select("id, profile_id")
+      .in("profile_id", profileIds)
+      .eq("status", status)
+      .order("id")
+      .range(offset, offset + 999);
+
+    if (status === "completed") {
+      query = query.gte("completed_at", dayStart).lt("completed_at", dayEnd);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const page = (data ?? []) as BoardRow[];
+    boards.push(...page);
+    if (page.length < 1000) break;
+  }
+
+  return boards;
+};
+
+const getReminderBodies = async (
+  supabase: SupabaseClient,
+  reminders: ClaimedReminder[],
+  now: Date,
+) => {
+  const { date, start, end } = getKstDayWindow(now);
+  const boardIdsByProfile = new Map<string, Set<string>>();
+  const profileIds = [...new Set(reminders.map((item) => item.profile_id))];
+
+  for (const profileId of profileIds) {
+    boardIdsByProfile.set(profileId, new Set());
+  }
+
+  for (const profileChunk of chunk(profileIds, 100)) {
+    const [activeBoards, completedTodayBoards] = await Promise.all([
+      loadBoards(supabase, profileChunk, "active", start, end),
+      loadBoards(supabase, profileChunk, "completed", start, end),
+    ]);
+
+    for (const board of [...activeBoards, ...completedTodayBoards]) {
+      boardIdsByProfile.get(board.profile_id)?.add(board.id);
+    }
+  }
+
+  const checkedBoardIds = new Set<string>();
+  const boardIds = [
+    ...new Set([...boardIdsByProfile.values()].flatMap((ids) => [...ids])),
+  ];
+
+  for (const boardChunk of chunk(boardIds, 100)) {
+    const { data, error } = await supabase
+      .from("sticker_daily")
+      .select("board_id")
+      .eq("d", date)
+      .gt("count", 0)
+      .in("board_id", boardChunk);
+
+    if (error) throw error;
+    for (const row of data ?? []) checkedBoardIds.add(row.board_id);
+  }
+
+  return new Map<string, string>(
+    profileIds.map(
+      (profileId) =>
+        [
+          profileId,
+          getReminderBody(
+            [...(boardIdsByProfile.get(profileId) ?? [])],
+            checkedBoardIds,
+          ),
+        ] as const,
+    ),
+  );
+};
+
+const updateReminderLogBodies = async (
+  supabase: SupabaseClient,
+  reminders: ClaimedReminder[],
+  bodiesByProfile: Map<string, string>,
+) => {
+  const logIdsByBody = new Map<string, string[]>();
+
+  for (const reminder of reminders) {
+    const body = bodiesByProfile.get(reminder.profile_id);
+    if (!body)
+      throw new Error("Reminder body is missing for a claimed profile");
+    logIdsByBody.set(body, [
+      ...(logIdsByBody.get(body) ?? []),
+      reminder.notification_log_id,
+    ]);
+  }
+
+  for (const [body, logIds] of logIdsByBody) {
+    for (const logChunk of chunk(logIds, 100)) {
+      const { data, error } = await supabase
+        .from("notification_logs")
+        .update({ message_body: body })
+        .in("id", logChunk)
+        .select("id, message_body");
+
+      if (error) throw error;
+      const updatedIds = new Set(
+        (data ?? [])
+          .filter((log) => log.message_body === body)
+          .map((log) => log.id),
+      );
+      if (logChunk.some((id) => !updatedIds.has(id))) {
+        throw new Error("Failed to confirm every reminder log body update");
+      }
+    }
+  }
+};
+
 serve(async (request: Request) => {
   try {
     if (!authorize(request)) {
@@ -95,20 +232,24 @@ serve(async (request: Request) => {
       getSupabaseServiceKey(),
       { auth: { persistSession: false } },
     );
+    const now = new Date();
 
     const { data: claimedReminders, error: claimError } = await supabase.rpc(
       CLAIM_RPC_BY_POLICY[policy],
       {
+        p_now: now.toISOString(),
         p_limit: 1000,
         p_message_type: MESSAGE_TYPE,
         p_message_trigger: MESSAGE_TRIGGER,
-        p_message_body: MESSAGE_BODY,
+        p_message_body: REMINDER_BODIES.none,
       },
     );
 
     if (claimError) throw claimError;
 
     const reminders = (claimedReminders ?? []) as ClaimedReminder[];
+    const bodiesByProfile = await getReminderBodies(supabase, reminders, now);
+    await updateReminderLogBodies(supabase, reminders, bodiesByProfile);
     const deliveryState = new Map<
       string,
       {
@@ -120,6 +261,11 @@ serve(async (request: Request) => {
     const messages: PushMessage[] = [];
 
     for (const reminder of reminders) {
+      const body = bodiesByProfile.get(reminder.profile_id);
+      if (!body) {
+        throw new Error("Reminder body is missing for a claimed profile");
+      }
+
       deliveryState.set(reminder.notification_log_id, {
         ticketIds: [],
         ticketTokenMap: {},
@@ -130,6 +276,7 @@ serve(async (request: Request) => {
         messages.push({
           logId: reminder.notification_log_id,
           token,
+          body,
         });
       }
     }
@@ -143,10 +290,10 @@ serve(async (request: Request) => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          messageChunk.map(({ token }) => ({
+          messageChunk.map(({ token, body }) => ({
             to: token,
             title: MESSAGE_TITLE,
-            body: MESSAGE_BODY,
+            body,
             sound: "default",
             channelId: "remind.v1",
             data: { trigger: MESSAGE_TRIGGER },
@@ -198,8 +345,7 @@ serve(async (request: Request) => {
       const { error: updateError } = await supabase
         .from("notification_logs")
         .update({
-          expo_ticket_ids:
-            state.ticketIds.length > 0 ? state.ticketIds : null,
+          expo_ticket_ids: state.ticketIds.length > 0 ? state.ticketIds : null,
           expo_ticket_token_map:
             Object.keys(state.ticketTokenMap).length > 0
               ? state.ticketTokenMap
