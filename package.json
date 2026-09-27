@@ -14,9 +14,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "supabase:test:start": "supabase start --workdir test/supabase-local",
+    "supabase:test:db:start": "supabase start --workdir test/supabase-local --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor",
     "supabase:test:reset": "supabase db reset --workdir test/supabase-local",
     "supabase:test:stop": "supabase stop --workdir test/supabase-local",
-    "test:db": "supabase test db --workdir test/supabase-local",
+    "test:db": "supabase migration up --local --workdir test/supabase-local && supabase test db --workdir test/supabase-local",
     "test:integration": "node scripts/run-supabase-integration-tests.mjs",
     "storybook-generate": "sb-rn-get-stories",
     "storybook-expo:build": "EXPO_PUBLIC_STORYBOOK_ENABLED=true npx expo export --platform web"

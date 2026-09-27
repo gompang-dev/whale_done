@@ -1,6 +1,11 @@
 project_id = "praiseboard-test"
 
+[api]
+port = 55421
+
 [db]
+port = 55422
+shadow_port = 55420
 major_version = 17
 
 [db.seed]
@@ -16,9 +21,14 @@ enable_anonymous_sign_ins = true
 
 [studio]
 enabled = false
+port = 55423
 
 [inbucket]
 enabled = false
+port = 55424
+
+[analytics]
+port = 55427
 
 [storage]
 enabled = false
