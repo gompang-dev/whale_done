@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(8);
+select plan(13);
 
 insert into auth.users (
   instance_id,
@@ -148,6 +148,74 @@ select is(
   ),
   'DAILY_LIMIT_EXCEEDED',
   'daily sticker limit is enforced'
+);
+
+select is(
+  (
+    select (public.get_board_streak(id)->>'currentStreak')::integer
+    from public.boards where title = '첫 번째 보드'
+  ),
+  0,
+  'today alone does not start a displayed streak'
+);
+
+select is(
+  (
+    select (public.get_board_streak(id)->>'maxStreak')::integer
+    from public.boards where title = '첫 번째 보드'
+  ),
+  1,
+  'single-day history still counts toward the maximum streak'
+);
+
+set local role postgres;
+insert into public.sticker_daily (board_id, d, count)
+select id, (now() at time zone 'Asia/Seoul')::date - 1, 1
+from public.boards where title = '첫 번째 보드';
+set local role authenticated;
+
+select is(
+  (
+    select (public.get_board_streak(id)->>'currentStreak')::integer
+    from public.boards where title = '첫 번째 보드'
+  ),
+  2,
+  'yesterday and today display a two-day streak'
+);
+
+set local role postgres;
+delete from public.sticker_daily
+where board_id = (select id from public.boards where title = '첫 번째 보드')
+  and d = (now() at time zone 'Asia/Seoul')::date;
+set local role authenticated;
+
+select is(
+  (
+    select (public.get_board_streak(id)->>'currentStreak')::integer
+    from public.boards where title = '첫 번째 보드'
+  ),
+  1,
+  'yesterday alone displays a one-day streak'
+);
+
+set local role postgres;
+delete from public.sticker_daily
+where board_id = (select id from public.boards where title = '첫 번째 보드');
+insert into public.sticker_daily (board_id, d, count)
+select id, (now() at time zone 'Asia/Seoul')::date - 2, 1
+from public.boards where title = '첫 번째 보드';
+insert into public.sticker_daily (board_id, d, count)
+select id, (now() at time zone 'Asia/Seoul')::date, 1
+from public.boards where title = '첫 번째 보드';
+set local role authenticated;
+
+select is(
+  (
+    select (public.get_board_streak(id)->>'currentStreak')::integer
+    from public.boards where title = '첫 번째 보드'
+  ),
+  0,
+  'sticker today does not show a streak when yesterday is missing'
 );
 
 update public.boards

@@ -56,6 +56,9 @@ begin
     case
       when latest_day.d is null then 0
       when latest_day.d < today - 1 then 0
+      when latest_day.d = today and not exists (
+        select 1 from ordered_days where d = today - 1
+      ) then 0
       else (
         select count(*)::int
         from ordered_days

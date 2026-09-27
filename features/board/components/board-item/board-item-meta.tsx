@@ -26,11 +26,11 @@ const BoardItemMeta = ({
   const shouldShowTodayDoneState = shouldApplyTodayDoneState && isTodayDone;
   const shouldDisableText = shouldApplyTodayDoneState && boardDisabled;
   const displayStreak =
-    !isCompleted && board.currentStreak > 0
+    !isCompleted &&
+    board.currentStreak > 0 &&
+    (!board.todaySuccess || board.currentStreak > 1)
       ? board.currentStreak
-      : !isCompleted && (board.todaySuccess || board.todayStickerCount > 0)
-        ? 1
-        : 0;
+      : 0;
 
   return (
     <View className="min-w-0 flex-1 flex-row items-center gap-[11px]">
